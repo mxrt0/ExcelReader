@@ -1,10 +1,17 @@
-﻿namespace ExcelReader
+﻿using ExcelReader.Context;
+using ExcelReader.Services;
+using Microsoft.EntityFrameworkCore;
+using OfficeOpenXml;
+namespace ExcelReader;
+
+public class Program
 {
-    internal class Program
+    static async Task Main()
     {
-        static void Main(string[] args)
-        {
-            Console.WriteLine("Hello, World!");
-        }
+        ExcelPackage.License.SetNonCommercialPersonal("mxrt0");
+        var options = new DbContextOptionsBuilder<ProductsDbContext>().UseSqlite(@"Data Source=..\..\..\products.db").Options;
+        var dbContext = new ProductsDbContext(options);
+        var reader = new ProductReader(dbContext);
+        await reader.Run();
     }
 }

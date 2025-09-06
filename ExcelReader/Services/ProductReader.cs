@@ -1,34 +1,34 @@
 ﻿using ExcelReader.Context;
-using ExcelReader.Models;
 using OfficeOpenXml;
 namespace ExcelReader.Services;
 
 public class ProductReader
 {
-    private ProductsDbContext _dbContext;
     private GenericDbContext? _genericContext;
-    private string excelFilePath = @"..\..\..\products.xlsx";
-    public ProductReader(ProductsDbContext dbContext)
+    private string excelFilePath;
+    public ProductReader(string filePath)
     {
-        AnsiConsole.MarkupLine("[aqua]Creating [lime][bold]Database Table[/][/]...[/]\n");
-        _dbContext = dbContext;
-        _dbContext.Database.EnsureDeleted();
-        _dbContext.Database.EnsureCreated();
-        AnsiConsole.MarkupLine("[aqua]Created [lime][bold]Database Table[/][/]![/]\n");
+        excelFilePath = filePath;
     }
 
     public async Task Run()
     {
-        await SeedExcelData();
-        var products = ReadProductsFromSpreadsheet(excelFilePath);
-        await SaveProductsToDatabase(products);
-    }
-
-    public async Task RunGeneric()
-    {
-        await SeedExcelData();
+        if (!File.Exists(excelFilePath))
+        {
+            try
+            {
+                await SeedExcelData();
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[red]Error while locating file path: [bold]{ex.Message}[/][/]");
+                return;
+            }
+        }
         var data = ReadDataFromSpreadsheet(excelFilePath);
         await SaveDataToDatabase(data);
+
+        DisplayData(_genericContext!.Items);
     }
 
     public async Task SeedExcelData()
@@ -49,17 +49,17 @@ public class ProductReader
             .Start(ctx =>
             {
                 var task = ctx.AddTask("[aqua]Generating [lime][bold]Excel[/][/] Worksheet[/]\n", maxValue: productsCount);
-                foreach (var product in GenerateProducts(productsCount))
-                {
-                    worksheet.Cells[row, 1].Value = product.ProductName;
-                    worksheet.Cells[row, 2].Value = product.UnitPrice;
-                    worksheet.Cells[row, 3].Value = product.Quantity;
-                    worksheet.Cells[row, 4].Value = product.TotalPrice;
-                    worksheet.Cells[row, 5].Value = product.TotalPriceWithVAT;
-                    worksheet.Cells[row, 6].Value = product.Random;
-                    row++;
-                    task.Increment(1);
-                }
+                //foreach (var product in GenerateProducts(productsCount))
+                //{
+                //    worksheet.Cells[row, 1].Value = product.ProductName;
+                //    worksheet.Cells[row, 2].Value = product.UnitPrice;
+                //    worksheet.Cells[row, 3].Value = product.Quantity;
+                //    worksheet.Cells[row, 4].Value = product.TotalPrice;
+                //    worksheet.Cells[row, 5].Value = product.TotalPriceWithVAT;
+                //    worksheet.Cells[row, 6].Value = product.Random;
+                //    row++;
+                //    task.Increment(1);
+                //}
             });
 
         worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
@@ -68,40 +68,10 @@ public class ProductReader
 
         AnsiConsole.MarkupLine("[aqua]Generated [lime][bold]Excel[/][/] Worksheet![/]\n");
     }
-    public IEnumerable<Product> ReadProductsFromSpreadsheet(string filePath)
-    {
-        AnsiConsole.MarkupLine("[aqua]Opening [lime][bold]Excel[/][/] worksheet...[/]\n");
-        using var package = new ExcelPackage(new FileInfo(filePath));
-        var worksheet = package.Workbook.Worksheets[0];
-        AnsiConsole.MarkupLine("[aqua]Opened [lime][bold]Excel[/][/] worksheet![/]");
-
-        int rowCount = worksheet.Dimension.End.Row;
-        int colCount = worksheet.Dimension.End.Column;
-
-        var products = new List<Product>();
-        AnsiConsole.Progress()
-            .Start(ctx =>
-            {
-                var task = ctx.AddTask("[aqua]Reading Data From [lime][bold]Excel[/][/] Worksheet[/]", maxValue: rowCount - 1);
-
-                for (int row = 2; row <= rowCount; row++)
-                {
-                    products.Add(new Product(
-                        worksheet.Cells[row, 1].Text,                       // Name
-                        decimal.Parse(worksheet.Cells[row, 2].Text),        // UnitPrice
-                        int.Parse(worksheet.Cells[row, 3].Text),            // Quantity
-                        decimal.Parse(worksheet.Cells[row, 4].Text),        // TotalPrice
-                        decimal.Parse(worksheet.Cells[row, 5].Text)         // TotalPriceWithVAT
-                    ));
-                    task.Increment(1);
-                }
-            });
-        return products;
-    }
 
     public IEnumerable<Models.ExcelRow> ReadDataFromSpreadsheet(string filePath)
     {
-        AnsiConsole.MarkupLine("[aqua]Opening [lime][bold]Excel[/][/] worksheet...[/]\n");
+        AnsiConsole.MarkupLine("[aqua]\nOpening [lime][bold]Excel[/][/] worksheet...[/]\n");
         using var package = new ExcelPackage(new FileInfo(filePath));
         var worksheet = package.Workbook.Worksheets[0];
         AnsiConsole.MarkupLine("[aqua]Opened [lime][bold]Excel[/][/] worksheet![/]");
@@ -115,16 +85,20 @@ public class ProductReader
             var header = worksheet.Cells[1, col].Text.Trim();
             headers.Add(string.IsNullOrEmpty(header) ? $"Column{col}" : header);
         }
+
+        AnsiConsole.MarkupLine("[aqua]\nCreating [lime][bold]Database Table[/][/]...[/]\n");
         _genericContext = new GenericDbContext(headers);
         _genericContext.Database.EnsureDeleted();
         _genericContext.Database.EnsureCreated();
+        AnsiConsole.MarkupLine("[aqua]Created [lime][bold]Database Table[/][/]![/]\n");
+
         var rows = new List<Models.ExcelRow>();
         AnsiConsole.Progress()
             .Start(ctx =>
             {
                 var task = ctx.AddTask("[aqua]Reading Data From [lime][bold]Excel[/][/] Worksheet[/]", maxValue: rowCount - 1);
 
-                for (int row = 2; row <= rowCount; row++) // start after header
+                for (int row = 2; row <= rowCount; row++)
                 {
                     var entity = new Models.ExcelRow();
 
@@ -132,7 +106,7 @@ public class ProductReader
                     for (int col = 1; col <= colCount; col++)
                     {
                         var header = headers[col - 1];
-                        var colValue = worksheet.Cells[row, col].Text.Trim();
+                        var colValue = worksheet.Cells[row, col].Text.Trim() ?? "<>";
                         entry.Property(header).CurrentValue = colValue;
                     }
                     task.Increment(1);
@@ -142,16 +116,6 @@ public class ProductReader
         return rows;
     }
 
-    public async Task SaveProductsToDatabase(IEnumerable<Product> products)
-    {
-        AnsiConsole.MarkupLine("[aqua]Saving [lime][bold]Products[/][/] To Database...[/]\n");
-        foreach (var product in products)
-        {
-            _dbContext.Products.Add(product);
-        }
-        await _dbContext.SaveChangesAsync();
-        AnsiConsole.MarkupLine("[aqua]Saved [lime][bold]Products[/][/] To Database![/]");
-    }
     public async Task SaveDataToDatabase(IEnumerable<Models.ExcelRow> items)
     {
         AnsiConsole.MarkupLine("[aqua]Saving [lime][bold]Data[/][/] To Database...[/]\n");
@@ -160,19 +124,39 @@ public class ProductReader
             _genericContext!.Items.Add(item);
         }
         await _genericContext!.SaveChangesAsync();
-        AnsiConsole.MarkupLine("[aqua]Saved [lime][bold]Data[/][/] To Database![/]");
+        AnsiConsole.MarkupLine("[aqua]Saved [lime][bold]Data[/][/] To Database!\n\n[/]");
     }
-    private IEnumerable<Product> GenerateProducts(int count)
-    {
-        var rand = new Random();
 
-        for (int i = 0; i < count; i++)
+    public void DisplayData(IEnumerable<Models.ExcelRow> items)
+    {
+        var table = new Table().RoundedBorder().Centered().ShowRowSeparators();
+        var headers = _genericContext!.GetHeaders();
+        foreach (string header in headers)
         {
-            string name = $"Product {i + 1}";
-            decimal unitPrice = Math.Round((decimal)(rand.NextDouble() * 10 + 0.5), 2);
-            int quantity = rand.Next(1, 20);
-            string random = $"Random {i + 1}";
-            yield return new Product(name, unitPrice, quantity, random);
+            table.AddColumn(header);
         }
+        var entities = items.Select(e => _genericContext!.Entry(e)).Where(e =>
+        {
+            foreach (var header in headers)
+            {
+                if (e.Property(header).CurrentValue is null || string.IsNullOrEmpty(e.Property(header)?.CurrentValue?.ToString()))
+                {
+                    return false;
+                }
+            }
+            return true;
+        });
+        foreach (var entity in entities)
+        {
+            string[] rowData = new string[headers.Count()];
+            int index = 0;
+            foreach (string header in headers)
+            {
+                rowData[index++] = entity.Property(header).CurrentValue!.ToString()!;
+            }
+            table.AddRow(rowData);
+        }
+        AnsiConsole.MarkupLine($"[aqua]Data:[/]\n");
+        AnsiConsole.Write(table);
     }
 }

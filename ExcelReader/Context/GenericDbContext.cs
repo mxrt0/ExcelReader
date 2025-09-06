@@ -14,6 +14,8 @@ public class GenericDbContext : DbContext
 
     public DbSet<ExcelRow> Items { get; set; }
 
+    public IEnumerable<string> GetHeaders() => _headers;
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         optionsBuilder.UseSqlite(@"Data Source=..\..\..\products.db");

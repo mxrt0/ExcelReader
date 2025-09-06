@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/ExcelReader/products.db
+/ExcelReader/products.db-shm
+/ExcelReader/products.db-wal

@@ -1,4 +1,5 @@
-﻿using ExcelReader.Context;
+﻿global using Spectre.Console;
+using ExcelReader.Context;
 using ExcelReader.Services;
 using Microsoft.EntityFrameworkCore;
 using OfficeOpenXml;
@@ -12,6 +13,7 @@ public class Program
         var options = new DbContextOptionsBuilder<ProductsDbContext>().UseSqlite(@"Data Source=..\..\..\products.db").Options;
         var dbContext = new ProductsDbContext(options);
         var reader = new ProductReader(dbContext);
-        await reader.Run();
+        await reader.RunGeneric();
+        Console.ReadKey();
     }
 }
